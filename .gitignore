@@ -1,0 +1,47 @@
+# Thanks to:
+# https://github.com/github/gitignore/blob/master/Global/Emacs.gitignore
+# https://github.com/github/gitignore/blob/master/Python.gitignore
+
+# EMACS
+
+# -*- mode: gitignore; -*-
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Org-mode
+.org-id-locations
+*_archive
+
+# flymake-mode
+*_flymake.*
+
+# eshell files
+/eshell/history
+/eshell/lastdir
+
+# elpa packages
+/elpa/
+
+# Flycheck
+flycheck_*.el
+
+# server auth directory
+/server/
+
+# projectiles files
+.projectile
+
+# directory configuration
+.dir-locals.el
+
+
+# PYTHON
+__pycache__/
+*.py[cod]
+*$py.class
