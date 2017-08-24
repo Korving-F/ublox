@@ -15,60 +15,98 @@ import sys
 #autodetecting of device file here
 #print(y.decode("iso8859"))
 
+#Suitable for HAB Usage Max Altitude 50,000 meters / 164041 feet  in Flight Mode.
+# How to configure for flight mode? / Hab usage?
 
-dev = serial.Serial('/dev/ttyUSB0', baudrate=115200, timeout=1)
-ubox_synch = '\xb5b'
-counter = 0
-
-# Run this loop for a while and occasionally flush the file? in case reading is slower than writing from device
-while(True):
-    if dev.in_waiting > 0:
-        if counter < 2:
-            s = dev.read()
-            if s == ubox_synch[counter]:
-                counter += 1
-            elif s == ubox_synch[0]:
-                counter = 1
+def main():
+    dev = serial.Serial('/dev/ttyUSB0', baudrate=115200, timeout=1)
+    ubox_synch = '\xb5b'
+    counter = 0
+    enable_message(dev, 1, 2)
+    # Run this loop for a while and occasionally flush the file? in case reading is slower than writing from device
+    while(True):    
+        if dev.in_waiting > 0:
+            if counter < 2:
+                try:
+                    s = dev.read()
+                    if s == ubox_synch[counter]:
+                        counter += 1
+                    elif s == ubox_synch[0]:
+                        counter = 1
+                    else:
+                        counter = 0
+                except serial.serialutil.SerialException:
+                    print("Somethig went wrong")
+                    
             else:
-                counter = 0
+                ubx_class = dev.read()
+                ubx_id = dev.read()
+                print(int(binascii.hexlify(ubx_class),16))
+                print(int(binascii.hexlify(ubx_id),16))
+                print(ubx_id) #identify test strings for dictionary and replace keys
                 
-        else:
-            ubx_class = dev.read()
-            ubx_id = dev.read()
-            print(ubx_id) #identify test strings for dictionary and replace keys
-
-            try:
-                result = {'02': lambda packet: ubx_NAV_POSLLH(),
-                          '04': lambda packet: ubx_NAV_DOP(),
-                          '06': lambda packet: ubx_NAV_SOL()
-                          }[ubx_id]()
-            except KeyError:
-                print("Invalid packet id")
-
-            
-            counter = 0
+                try:
+                    # package = ubxMessage(ubx_class, ubx_id)
+                    # package.formattedContent
+                    # 
+                    result = {'02': lambda x: ubx_NAV_POSLLH(),
+                              '04': lambda x: ubx_NAV_DOP(),
+                              '06': lambda x: ubx_NAV_SOL()
+                    }
+                    result[ubx_id]()
+                except KeyError:
+                    print("Invalid packet id")
+                    return True
+                counter = 0
 
 
-def setup():
-    print("Enter some code here")
+def enable_message(serial,  msgClass, msgId):
+    # b562 aka message header integer <- can thus be casted as one into binary
+    serial.baudrate = 9600
+    header = 46434
+    ubx_class = 6
+    ubx_id = 1
+    length = 8
+    payload = [length, 0, msgClass, msgId,0, 1, 0, 0, 0, 0]
+    checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+    msg = struct.pack('>HBBBBBBBBBBBBBB', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 1, 0, 0, 0, 0, checksum[0], checksum[1])
+    print(binascii.hexlify(msg))
+    serial.write(msg)
+    exit()
+    
+    
+def disable_message(serial, msgClass, msgId, protocol="UBX"):
+    print("Disable: {0} {1} {2}".format(protocol, msgClass, msgId))
+
+def alter_message_rate():
+    print("Hi!")
+
+def list_enabled_messages():
+    print("yo!")
+
+
+def detect_ports():
     ports = list(serial.tools.list_ports.comports())
     for i in ports:
-        print(i)
+        print(i.device)
 
-    first_device = ports[0].device
-    # Then proceed to dev = serial.Serial(first_device)
+def configure_port(serial, port=None):
+    if(port==None):
+         ports = list(serial.tools.list_ports.comports())
+         port = ports[0].device
+
+    try:
+        serial.port = port
+    except SerialException:
+        print("woops")
     
-    # Serial connection here?
-    # Configure device to send specific data-frames <- first static
-    # Limited to three UBX-NAV messages -> later dynamic?
-
 
 # time_of_week in ms / longitude in deg / latitude in deg
 # height ellipsoid in mm / height mean sea level mm
 # horizontal accuracy in mm / vertical accuracy in mm
 def ubx_NAV_POSLLH():
     payload = dev.read(size=30)
-    if calc_checksum(1, 2, payload, chk1, chk2):
+    if calc_checksum(1, 2, payload):
         try:
             payload = payload[2:]
             time_of_week, lon, lat, h_ellips, h_sea, hor, vert = struct.unpack('LllllLL', payload)
@@ -117,25 +155,41 @@ def ubx_NAV_SOL():
     return True
 
 
+#def ubx_NAV_PVT():
+
+#def ubx_CFG_PRT():   <- set baudrate here for example
+
+
 
 # Checksum is calculated over class/id/length/payload of packet
 # using 8-bit Fletcher Algorithm (also used in TCP) RFC 1145
 # bitmask 0xFF == modulus 256
-def calc_checksum(ubx_class, ubx_id, payload):
-    
-    chk1 = int(dev.read().encode('hex'), 16)
-    chk2 = int(dev.read().encode('hex'), 16)
-    
+def calc_checksum(ubx_class, ubx_id, payload, returnval=False):
+
     check1 = ubx_class + ubx_id
     check2 = (2*ubx_class) + ubx_id
     
-    for i in range(0, len(payload)):
-        check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
-        check2 = (check1 + check2) % 256
-
-    if chk1==check1 and chk2==check2:
-        return True
+    if(returnval==False):
+        chk1 = int(dev.read().encode('hex'), 16)
+        chk2 = int(dev.read().encode('hex'), 16)
+        
+        for i in range(0, len(payload)):
+            check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
+            check2 = (check1 + check2) % 256
+            
+            if chk1==check1 and chk2==check2:
+                return True
+            else:
+                print("something went wrong")
+                return False
     else:
-        print("something went wrong")
-        return False
+        for i in range(0, len(payload)):
+            check1 = (check1 + payload[i]) % 256
+            check2 = (check1 + check2) % 256
 
+        result = [check1, check2]
+        return result
+
+
+if __name__ == "__main__":
+    main()
