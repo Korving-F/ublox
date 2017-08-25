@@ -18,11 +18,13 @@ import sys
 #Suitable for HAB Usage Max Altitude 50,000 meters / 164041 feet  in Flight Mode.
 # How to configure for flight mode? / Hab usage?
 
+#59.4 / 24.6
+
 def main():
-    dev = serial.Serial('/dev/ttyUSB0', baudrate=115200, timeout=1)
+    dev = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=1)
     ubox_synch = '\xb5b'
     counter = 0
-    enable_message(dev, 1, 2)
+    #enable_message(dev, 1, 2)
     # Run this loop for a while and occasionally flush the file? in case reading is slower than writing from device
     while(True):    
         if dev.in_waiting > 0:
@@ -39,47 +41,55 @@ def main():
                     print("Somethig went wrong")
                     
             else:
-                ubx_class = dev.read()
-                ubx_id = dev.read()
-                print(int(binascii.hexlify(ubx_class),16))
-                print(int(binascii.hexlify(ubx_id),16))
-                print(ubx_id) #identify test strings for dictionary and replace keys
+                ubx_class = binascii.hexlify(dev.read())
+                ubx_id = binascii.hexlify(dev.read())
+                print(ubx_class)
+                print(ubx_id)
                 
                 try:
                     # package = ubxMessage(ubx_class, ubx_id)
                     # package.formattedContent
                     # 
-                    result = {'02': lambda x: ubx_NAV_POSLLH(),
-                              '04': lambda x: ubx_NAV_DOP(),
-                              '06': lambda x: ubx_NAV_SOL()
+                    result = {'02': lambda: ubx_NAV_POSLLH(dev),
+                              '04': lambda: ubx_NAV_DOP(dev),
+                              '06': lambda: ubx_NAV_SOL(dev)
                     }
                     result[ubx_id]()
                 except KeyError:
                     print("Invalid packet id")
-                    return True
+
+                exit()
                 counter = 0
 
+                
+# UBX-CFG-CFG Message should go here (x06 x09)
+def save_configuration():
+    print("tralala cfg-cfg message here")
 
-def enable_message(serial,  msgClass, msgId):
-    # b562 aka message header integer <- can thus be casted as one into binary
-    serial.baudrate = 9600
-    header = 46434
-    ubx_class = 6
-    ubx_id = 1
-    length = 8
-    payload = [length, 0, msgClass, msgId,0, 1, 0, 0, 0, 0]
+    
+# Creates UBX-CFG-MSG
+def enable_message(dev,  msgClass, msgId):
+    header, ubx_class, ubx_id, length = 46434, 6, 1, 8
+    
+    #six values stand for i2c uart1 uart2 etc.. Expand later?
+    payload = [length, 0, msgClass, msgId, 0, 1, 0, 0, 0, 0]
+    
     checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
-    msg = struct.pack('>HBBBBBBBBBBBBBB', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 1, 0, 0, 0, 0, checksum[0], checksum[1])
+    msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 1, 0, 0, 0, 0, checksum[0], checksum[1])
+    dev.write(msg)
+    
+    
+# Same UBX-CFG-MSG as enable_message() <- should refer to that but with all chanels at zero
+def disable_message(dev, msgClass, msgId):
+    header, ubx_class, ubx_id, length = 46434, 6, 1, 8
+    payload = [length, 0, msgClass, msgId, 0, 0, 0, 0, 0, 0]
+    checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+    msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 0, 0, 0, 0, 0, checksum[0], checksum[1])
     print(binascii.hexlify(msg))
-    serial.write(msg)
+    dev.write(msg)
     exit()
-    
-    
-def disable_message(serial, msgClass, msgId, protocol="UBX"):
-    print("Disable: {0} {1} {2}".format(protocol, msgClass, msgId))
 
-def alter_message_rate():
-    print("Hi!")
+    
 
 def list_enabled_messages():
     print("yo!")
@@ -90,7 +100,7 @@ def detect_ports():
     for i in ports:
         print(i.device)
 
-def configure_port(serial, port=None):
+def configure_port(serial, baudrate, port=None):
     if(port==None):
          ports = list(serial.tools.list_ports.comports())
          port = ports[0].device
@@ -104,16 +114,19 @@ def configure_port(serial, port=None):
 # time_of_week in ms / longitude in deg / latitude in deg
 # height ellipsoid in mm / height mean sea level mm
 # horizontal accuracy in mm / vertical accuracy in mm
-def ubx_NAV_POSLLH():
+def ubx_NAV_POSLLH(dev):
     payload = dev.read(size=30)
-    if calc_checksum(1, 2, payload):
+    if calc_checksum(1, 2, payload, dev):
         try:
             payload = payload[2:]
-            time_of_week, lon, lat, h_ellips, h_sea, hor, vert = struct.unpack('LllllLL', payload)
+            # Remove padding (=) introduced by struct for processor optimization
+            iTOW, lon, lat, height, hMSL, hAcc, vAcc = struct.unpack('=LllllLL', payload)
             print("NAV_POSLLH - Time:{0} Longitude:{1} Lattitude:{2} HeightEllips:{3} Height_Sea:{4} Accuracy:{5} / {6}".format(
-                  time_of_week, lon, lat, h_ellips, h_sea, hor, vert))
-        except Error:
+                iTOW, lon, lat, height, hMSL, hAcc, vAcc))
+        except struct.error:
             print(sys.exc_info()[0])
+            print(sys.exc_info()[1])
+            print(sys.exc_info()[2])
         
     return True
 
@@ -121,9 +134,9 @@ def ubx_NAV_POSLLH():
 # time_of_week in ms / Dilution of Precision
 # DOP is Dimensionless / scaled by factor 100
 # Geometric / Position / Time / Vertical / Horizontal / Northing / Easting
-def ubx_NAV_DOP():
+def ubx_NAV_DOP(dev):
     payload = dev.read(size=20)
-    if calc_checksum(1, 4, payload):
+    if calc_checksum(1, 4, payload, dev):
         try:
             payload = payload[2:]
             time_of_week, geo, pos, time, vert, hor, north, east = struct.unpack('LHHHHHHH', payload)
@@ -141,9 +154,9 @@ def ubx_NAV_DOP():
 # ECEF-Velocity X cm/s / ECEF-Velocity Y cm/s / ECEF-Velocity Z cm/s
 # Speed Accuracy cm/s / Position DOP (scale 0.01)
 # reserved / number of SV's used / reserved
-def ubx_NAV_SOL():
+def ubx_NAV_SOL(dev):
     payload = dev.read(size=54)
-    if calc_checksum(1, 4, payload):
+    if calc_checksum(1, 4, payload, dev):
         try:
             payload = payload[2:]
             iTOW, fTOW, week, gpsFix, flags, ecefX, ecefY, ecefZ, pAcc, ecefVX, ecefVY, ecefVZ, sAcc, pDOP, reserved1, numSV, reserved2 = struct.unpack('LlhBxlllLlllLHBBBBBB', payload)
@@ -164,7 +177,9 @@ def ubx_NAV_SOL():
 # Checksum is calculated over class/id/length/payload of packet
 # using 8-bit Fletcher Algorithm (also used in TCP) RFC 1145
 # bitmask 0xFF == modulus 256
-def calc_checksum(ubx_class, ubx_id, payload, returnval=False):
+# It might be that the modulo needs to be calculated after full operations
+# This might become relavant when overflow occurs in check1 <- NMEA messages like CFG use class/id (xF1 x41)
+def calc_checksum(ubx_class, ubx_id, payload, dev=None, returnval=False):
 
     check1 = ubx_class + ubx_id
     check2 = (2*ubx_class) + ubx_id
@@ -177,11 +192,11 @@ def calc_checksum(ubx_class, ubx_id, payload, returnval=False):
             check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
             check2 = (check1 + check2) % 256
             
-            if chk1==check1 and chk2==check2:
-                return True
-            else:
-                print("something went wrong")
-                return False
+        if chk1==check1 and chk2==check2:
+            return True
+        else:
+            print("Checksum is incorrect")
+            return False
     else:
         for i in range(0, len(payload)):
             check1 = (check1 + payload[i]) % 256
