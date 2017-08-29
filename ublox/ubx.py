@@ -26,7 +26,9 @@ def main():
     dev = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=1)
     ubox_synch = '\xb5b'
     counter = 0
-    enable_message(dev, 1, 6)
+    #enable_message(dev, 1, 7)
+    #save_config(dev)
+    
     #disable_message(dev, 1, 7)
     # Run this loop for a while and occasionally flush the file? in case reading is slower than writing from device
     while(True):    
@@ -60,23 +62,39 @@ def main():
                     result[ubx_id]()
                 except KeyError:
                     print("Invalid packet id")
+                    exit()
 
                 counter = 0
 
-                
-# UBX-CFG-CFG Message should go here (x06 x09)
-def save_configuration(dev):
-    header, ubx_class, ubx_id, length = 46434, 6, 9, 8
-    # See appropriate masking
 
+
+# UBX-CFG-CFG (x06 x09) (saveMask)
+def save_config(dev):
+    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
+    clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 255, 255], [0, 0, 0, 0], [3] 
+        
+    payload = [length, 0] + clearMask + saveMask + loadMask + deviceMask
+    checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+    payload = payload + checksum
     
+    msg = struct.pack('>H19B', header, ubx_class, ubx_id, *payload)
+    print(binascii.hexlify(msg))
+    dev.write(msg)
+    
+# UBX-CFG-CFG (x06 x09) (clearMask)
+def reset_config(dev):
+    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
+    
+# UBX-CFG-CFG (x06 x09) (Load mask)
+def load_config(dev):
+    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
+
 # Creates UBX-CFG-MSG
 def enable_message(dev,  msgClass, msgId):
     header, ubx_class, ubx_id, length = 46434, 6, 1, 8
     
-    #six values stand for i2c uart1 uart2 etc.. Expand later?
-    payload = [length, 0, msgClass, msgId, 0, 1, 0, 0, 0, 0]
-    
+    #six values stand for i2c uart1 uart2 etc.. Expand later? Now just UART
+    payload = [length, 0, msgClass, msgId, 0, 1, 0, 0, 0, 0]    
     checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
     msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 1, 0, 0, 0, 0, checksum[0], checksum[1])
     dev.write(msg)
@@ -88,12 +106,14 @@ def disable_message(dev, msgClass, msgId):
     payload = [length, 0, msgClass, msgId, 0, 0, 0, 0, 0, 0]
     checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
     msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 0, 0, 0, 0, 0, checksum[0], checksum[1])
-    print(binascii.hexlify(msg))
     dev.write(msg)
-    exit()
 
+
+def disable_NMEA_messages():
+    print("tralala")
+
+#def ubx_CFG_PRT():   <- set baudrate here for example
     
-
 def list_enabled_messages():
     print("yo!")
 
@@ -103,15 +123,18 @@ def detect_ports():
     for i in ports:
         print(i.device)
 
-def configure_port(serial, baudrate, port=None):
-    if(port==None):
+def change_port(newport):
+    print("asd")
+
+def configure_port(dev, baudrate, port=None):
+    if(dev.port==None and port==None and dev.baudrate!=baudrate):
          ports = list(serial.tools.list_ports.comports())
          port = ports[0].device
 
     try:
-        serial.port = port
+        dev.port = port
     except SerialException:
-        print("woops")
+        print("Assigning a port ")
     
 
 # time_of_week in ms / longitude in deg / latitude in deg
@@ -129,7 +152,6 @@ def ubx_NAV_POSLLH(dev):
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-    exit()
     return True
 
 
@@ -161,12 +183,11 @@ def ubx_NAV_SOL(dev):
     if calc_checksum(1, 6, payload, dev):
         try:
             payload = payload[2:]
-            iTOW, fTOW, week, gpsFix, flags, ecefX, ecefY, ecefZ, pAcc, ecefVX, ecefVY, ecefVZ, sAcc, pDOP, reserved1, numSV, reserved21, reserved22, reserved23, reserved24 = struct.unpack('=LlhBx3lL3lLH6B', payload)
+            iTOW, fTOW, week, gpsFix, flags, ecefX, ecefY, ecefZ, pAcc, ecefVX, ecefVY, ecefVZ, sAcc, pDOP, reserved1, numSV, reserved21, reserved22, reserved23, reserved24 = struct.unpack('=LlhBB3lL3lLH6B', payload)
             print("NAV_SOL - iTOW:{0} fTOW:{1} week:{2} gpsFix:{3} flags:{4} ecefX:{5} ecefY:{6} ecefZ:{7} pAcc:{8} ecefVX:{9} ecefVY:{10} ecefVZ:{11} sAcc:{12} pDOP:{13} numSV:{14}".format(iTOW, fTOW, week, gpsFix, flags, ecefX, ecefY, ecefZ, pAcc, ecefVX, ecefVY, ecefVZ, sAcc, pDOP, numSV))
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-    exit()
     return True
 
 
@@ -192,10 +213,6 @@ def ubx_NAV_PVT(dev):
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-    exit()
-
-
-#def ubx_CFG_PRT():   <- set baudrate here for example
 
 
 
