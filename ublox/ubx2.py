@@ -5,9 +5,9 @@ import struct
 import sys
 
 class ubxStream():
-    def __init__(self, serial=None):
+    def __init__(self, dev=None):
         
-        self.serial = serial
+        self.dev = dev
 
 
     @property

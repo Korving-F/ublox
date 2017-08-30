@@ -26,10 +26,7 @@ def main():
     dev = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=1)
     ubox_synch = '\xb5b'
     counter = 0
-    #enable_message(dev, 1, 7)
-    #save_config(dev)
     
-    #disable_message(dev, 1, 7)
     # Run this loop for a while and occasionally flush the file? in case reading is slower than writing from device
     while(True):    
         if dev.in_waiting > 0:
@@ -51,9 +48,6 @@ def main():
                 print("UBX Class: {} / UBX ID: {}".format(ubx_class, ubx_id))
                 
                 try:
-                    # package = ubxMessage(ubx_class, ubx_id)
-                    # package.formattedContent
-                    # 
                     result = {'02': lambda: ubx_NAV_POSLLH(dev),
                               '04': lambda: ubx_NAV_DOP(dev),
                               '06': lambda: ubx_NAV_SOL(dev),
@@ -68,26 +62,16 @@ def main():
 
 
 
-# UBX-CFG-CFG (x06 x09) (saveMask)
-def save_config(dev):
-    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
-    clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 255, 255], [0, 0, 0, 0], [3] 
-        
-    payload = [length, 0] + clearMask + saveMask + loadMask + deviceMask
-    checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
-    payload = payload + checksum
-    
-    msg = struct.pack('>H19B', header, ubx_class, ubx_id, *payload)
-    print(binascii.hexlify(msg))
-    dev.write(msg)
-    
-# UBX-CFG-CFG (x06 x09) (clearMask)
-def reset_config(dev):
-    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
-    
-# UBX-CFG-CFG (x06 x09) (Load mask)
-def load_config(dev):
-    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
+## UBX-CFG-PRT (0x06 0x00) <- baudrate
+## UBX-CFG-RATE (0x06 0x08) <- message update rate
+## UBX-CFG-NAV5 (0x06 0x24) <- to pedestrian?
+## UBX-CFG-RXM and/or UBX-CFG-PM2 for power save modes?
+## Time pulse test (0x06 0x31)?
+## UBX-ACK / Not ack <- (0x06 0x00 / 0x01)
+
+
+
+## UBX-CFG-MSG (0x06 0x01)
 
 # Creates UBX-CFG-MSG
 def enable_message(dev,  msgClass, msgId):
@@ -109,11 +93,45 @@ def disable_message(dev, msgClass, msgId):
     dev.write(msg)
 
 
+
+## UBX-CFG-CFG (x06 x09)
+#  3 different masks call on __config depending on configuration requirement
+#  Masks set to 255 <- watch out for future additions to cfg-cfg (see mask section)
+
+def __config(dev, clearMask, saveMask, loadMask, deviceMask):
+    header, ubx_class, ubx_id, length = 46434, 6, 9, 13
+    payload = [length, 0] + clearMask + saveMask + loadMask + deviceMask
+    checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+    payload = payload + checksum
+    
+    msg = struct.pack('>H19B', header, ubx_class, ubx_id, *payload)
+    print(binascii.hexlify(msg))
+    dev.write(msg)
+    
+# UBX-CFG-CFG (x06 x09) (clearMask)
+def reset_config(dev):
+    clearMask, saveMask, loadMask, deviceMask = [255, 255, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [3] 
+    __config(dev, clearMask, saveMask, loadMask, deviceMask)
+    
+# UBX-CFG-CFG (saveMask)
+def save_config(dev):
+    clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [3] 
+    __config(dev, clearMask, saveMask, loadMask, deviceMask)
+    
+# UBX-CFG-CFG (x06 x09) (loadMask)
+def load_config(dev):
+    clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 0, 0], [255, 255, 0, 0], [3] 
+    __config(dev, clearMask, saveMask, loadMask, deviceMask)
+
+    
+
+
+# Probably leave NMEA enabled but just disable by running through all ubx class/id's belonging
+# to NMEA and disabling them
 def disable_NMEA_messages():
     print("tralala")
 
-#def ubx_CFG_PRT():   <- set baudrate here for example
-    
+
 def list_enabled_messages():
     print("yo!")
 
@@ -212,6 +230,8 @@ def ubx_NAV_PVT(dev):
                 iTOW, year, month, day, hour, minute, second, valid, tAcc, nano, fixType, flags, flags2, numSV, lon, lat, height, hMSL, hAcc, vAcc, velN, velE, velD, gSpeed, headMot, sAcc, headAcc, pDOP, reserved11, headVeh, magDec, magAcc))
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
+        exit()
 
 
 
