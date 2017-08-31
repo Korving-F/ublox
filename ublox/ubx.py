@@ -22,10 +22,15 @@ import sys
 
 #59.4 / 24.6 <- lat lon
 
+
+
 def main():
     dev = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=1)
     ubox_synch = '\xb5b'
     counter = 0
+    #enable_message(dev, 1, 2)
+    #Some timing between here / checking for ACK message
+    #save_config(dev)
     
     # Run this loop for a while and occasionally flush the file? in case reading is slower than writing from device
     while(True):    
