@@ -22,13 +22,11 @@ import sys
 
 #59.4 / 24.6 <- lat lon
 
-
-
 def main():
     dev = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=1)
     ubox_synch = '\xb5b'
     counter = 0
-    #enable_message(dev, 1, 2)
+    enable_message(dev, 1, 2)
     #Some timing between here / checking for ACK message
     #save_config(dev)
     
@@ -86,7 +84,9 @@ def enable_message(dev,  msgClass, msgId):
     payload = [length, 0, msgClass, msgId, 0, 1, 0, 0, 0, 0]    
     checksum = calc_checksum(ubx_class, ubx_id, payload, returnval=True)
     msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, 0, 1, 0, 0, 0, 0, checksum[0], checksum[1])
-    dev.write(msg)
+    #dev.write(msg)
+    print(binascii.hexlify(msg))
+    exit()
     
     
 # Same UBX-CFG-MSG as enable_message() <- should refer to that but with all chanels at zero
@@ -120,7 +120,7 @@ def reset_config(dev):
     
 # UBX-CFG-CFG (saveMask)
 def save_config(dev):
-    clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [3] 
+    clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [19] 
     __config(dev, clearMask, saveMask, loadMask, deviceMask)
     
 # UBX-CFG-CFG (x06 x09) (loadMask)
