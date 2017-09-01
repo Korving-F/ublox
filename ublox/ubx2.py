@@ -57,6 +57,14 @@ class UbxStream(object):
         except AttributeError:
             print("Serial connection has not been initialized or assigned a port yet.")
 
+    def detect_ports(self):
+        ports = list(serial.tools.list_ports.comports())
+        if(len(ports) == 0):
+            print("No ports detected")
+        else:
+            for i in ports:
+                print(i.device)
+
 
     def read(self, timeout=5):
         self.dev.reset_input_buffer()
@@ -109,6 +117,11 @@ class UbxStream(object):
     def load_config(self):
         clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 0, 0], [255, 255, 0, 0], [19]
         msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
+        self.dev.write(msg.msg)
+        return msg
+
+    def nav_config(self, dynModel):
+        msg = UbxMessage('06', '24', msg_type="tx", dynModel=dynModel)
         self.dev.write(msg.msg)
         return msg
 
@@ -190,7 +203,8 @@ class UbxMessage(object):
                 print("{} {}".format(ubx_class, ubx_id))
                 
                 message = {'01': lambda: self.__ubx_CFG_MSG(kwargs["msgClass"], kwargs["msgId"], kwargs["ioPorts"]),
-                           '09': lambda: self.__ubx_CFG_CFG(kwargs["clearMask"], kwargs["saveMask"], kwargs["loadMask"], kwargs["deviceMask"])
+                           '09': lambda: self.__ubx_CFG_CFG(kwargs["clearMask"], kwargs["saveMask"], kwargs["loadMask"], kwargs["deviceMask"]),
+                           '24': lambda: self.__ubx_CFG_NAV5(kwargs["dynModel"])
                 }
                 message[ubx_id]()
             #UPD
@@ -324,7 +338,7 @@ class UbxMessage(object):
 
 
 
-    ## UBX-CFG-CFG (x06 x09)
+    ## UBX-CFG-CFG (0x06 0x09)
     def __ubx_CFG_CFG(self, clearMask, saveMask, loadMask, deviceMask):
         header, ubx_class, ubx_id, length = 46434, 6, 9, 13
         payload = [length, 0] + clearMask + saveMask + loadMask + deviceMask
@@ -338,6 +352,20 @@ class UbxMessage(object):
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
 
+    ## UBX-CFG-NAV5 (0x06 0x24)
+    #  ! only currently configures dynModel ! <- Needed for high altitude
+    def __ubx_CFG_NAV5(self, dynModel):
+        header, ubx_class, ubx_id, length = 46434, 6, 36, 36
+        body = [3, 0, 0, 0, 0, 16, 39, 0, 0, 5, 0, 250, 0, 250, 0, 100, 0, 44, 1, 0, 60, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 0]
+        payload = [length, 0] + [255, 255] + [dynModel] + body
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        payload = payload + checksum
+        try:
+            self.msg = struct.pack('>H42B', header, ubx_class, ubx_id, *payload)
+            self.ubx_class = '06'
+            self.ubx_id = '24'
+        except struct.error:
+            print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
     
     # Checksum is calculated over class/id/length/payload of packet

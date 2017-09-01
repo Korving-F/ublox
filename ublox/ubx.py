@@ -146,8 +146,8 @@ def detect_ports():
     for i in ports:
         print(i.device)
 
-def change_port(newport):
-    print("asd")
+#def change_port(newport):
+#    print("asd")
 
 def configure_port(dev, baudrate, port=None):
     if(dev.port==None and port==None and dev.baudrate!=baudrate):
