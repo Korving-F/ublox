@@ -8,7 +8,7 @@ import time
 class UbxStream(object):
     def __init__(self, dev=None):
         
-        self.ubox_synch = '\xb5b'
+        self._ubox_synch = '\xb5b'
         
         if(dev==None):
             self.dev = serial.Serial(timeout=1)
@@ -67,9 +67,9 @@ class UbxStream(object):
                 if counter < 2:
                     try:
                         s = self.dev.read()
-                        if s == self.ubox_synch[counter]:
+                        if s == self._ubox_synch[counter]:
                             counter += 1
-                        elif s == self.ubox_synch[0]:
+                        elif s == self._ubox_synch[0]:
                             counter = 1
                         else:
                             counter = 0
@@ -83,12 +83,40 @@ class UbxStream(object):
 
         print("Connection timed out..")
 
+    
+    def enable_message(self, msgClass, msgId):
+        msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 1, 0, 0, 0, 0])
+        self.dev.write(msg.msg)
+        return msg
+
+    def disable_message(self, msgClass, msgId):
+        msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 0, 0, 0, 0, 0])
+        self.dev.write(msg.msg)
+        return msg
+
+    def reset_config(self):
+        clearMask, saveMask, loadMask, deviceMask = [255, 255, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [3]
+        msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
+        self.dev.write(msg.msg)
+        return msg
+    
+    def save_config(self):
+        clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [19]
+        msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
+        self.dev.write(msg.msg)
+        return msg
+        
+    def load_config(self):
+        clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 0, 0], [255, 255, 0, 0], [19]
+        msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
+        self.dev.write(msg.msg)
+        return msg
+
             
 class UbxMessage(object):
     def __init__(self, ubx_class, ubx_id, msg_type="rx", **kwargs):
         if(msg_type == "rx"):
             print("Receiving")
-
             #NAV
             if(ubx_class == '01'):
                 print("{} {}".format(ubx_class, ubx_id))
@@ -143,8 +171,61 @@ class UbxMessage(object):
                 raise TypeError
                 
            
-        else:
+        elif(msg_type == "tx"):
             print("Transmitting")
+            #NAV
+            if(ubx_class == '01'):
+                print("")
+            #RXM
+            elif(ubx_class == '02'):
+                print("")
+            #INF
+            elif(ubx_class == '04'):
+                print("")
+            #ACK
+            elif(ubx_class == '05'):
+                print("")
+            #CFG
+            elif(ubx_class == '06'):
+                print("{} {}".format(ubx_class, ubx_id))
+                
+                message = {'01': lambda: self.__ubx_CFG_MSG(kwargs["msgClass"], kwargs["msgId"], kwargs["ioPorts"]),
+                           '09': lambda: self.__ubx_CFG_CFG(kwargs["clearMask"], kwargs["saveMask"], kwargs["loadMask"], kwargs["deviceMask"])
+                }
+                message[ubx_id]()
+            #UPD
+            elif(ubx_class == '09'):
+                print("")
+            #MON
+            elif(ubx_class == '0A'):
+                print("")
+            #AID
+            elif(ubx_class == '0B'):
+                print("")
+            #TIM
+            elif(ubx_class == '0D'):
+                print("")
+            #ESF
+            elif(ubx_class == '10'):
+                print("")
+            #MGA
+            elif(ubx_class == '13'):
+                print("")
+            #LOG
+            elif(ubx_class == '21'):
+                print("")
+            #SEC
+            elif(ubx_class == '27'):
+                print("")
+            #HNR
+            elif(ubx_class == '28'):
+                print("")
+            else:
+                print("Unsuported message class")
+                raise TypeError
+                
+        else:
+            print("Message type not supported.")
             
 
     ## UBX-NAV 0x01 ##
@@ -159,6 +240,8 @@ class UbxMessage(object):
                 payload = payload[2:]
                 # Remove padding (=) introduced by struct for processor optimization
                 self.iTOW, self.lon, self.lat, self.height, self.hMSL, self.hAcc, self.vAcc = struct.unpack('=LllllLL', payload)
+                self.ubx_class = '01'
+                self.ubx_id = '02'
 
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
@@ -173,6 +256,8 @@ class UbxMessage(object):
             try:
                 payload = payload[2:]
                 self.iTOW, self.gDOP, self.pDOP, self.tDOP, self.vDOP, self.hDOP, self.nDOP, self.eDOP = struct.unpack('=L7H', payload)
+                self.ubx_class = '01'
+                self.ubx_id = '04'
                 
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
@@ -190,6 +275,8 @@ class UbxMessage(object):
             try:
                 payload = payload[2:]
                 self.iTOW, self.fTOW, self.week, self.gpsFix, self.flags, self.ecefX, self.ecefY, self.ecefZ, self.pAcc, self.ecefVX, self.ecefVY, self.ecefVZ, self.sAcc, self.pDOP, reserved1, self.numSV, reserved21, reserved22, reserved23, reserved24 = struct.unpack('=LlhBB3lL3lLH6B', payload)
+                self.ubx_class = '01'
+                self.ubx_id = '06'
                 
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
@@ -212,13 +299,44 @@ class UbxMessage(object):
             try:
                 payload = payload[2:]
                 self.iTOW, self.year, self.month, self.day, self.hour, self.minute, self.second, self.valid, self.tAcc, self.nano, self.fixType, self.flags, self.flags2, self.numSV, self.lon, self.lat, self.height, self.hMSL, self.hAcc, self.vAcc, self.velN, self.velE, self.velD, self.gSpeed, self.headMot, self.sAcc, self.headAcc, self.pDOP, reserved11, reserved12, reserved13, reserved14, reserved15, reserved16,  self.headVeh, self.magDec, self.magAcc = struct.unpack('=LH5BBLlB2BB4l2L5lLLH6BlhH', payload)
-                
+
+                self.ubx_class = '01'
+                self.ubx_id = '07'
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
             
 
+                
     ## UBX-CFG 0x06 ##
+    
+    # UBX-CFG-MSG (0x06 0x01)
+    def __ubx_CFG_MSG(self,  msgClass, msgId, ioPorts):
+        header, ubx_class, ubx_id, length = 46434, 6, 1, 8
+        payload = [length, 0, msgClass, msgId] + ioPorts
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        try:
+            self.msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, ioPorts[0], ioPorts[1], ioPorts[2], ioPorts[3], ioPorts[4], ioPorts[5], checksum[0], checksum[1])
+            self.ubx_class = '06'
+            self.ubx_id = '01'
+        except struct.error:
+            print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
+
+
+    ## UBX-CFG-CFG (x06 x09)
+    def __ubx_CFG_CFG(self, clearMask, saveMask, loadMask, deviceMask):
+        header, ubx_class, ubx_id, length = 46434, 6, 9, 13
+        payload = [length, 0] + clearMask + saveMask + loadMask + deviceMask
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        payload = payload + checksum
+        try:
+            self.msg = struct.pack('>H19B', header, ubx_class, ubx_id, *payload)
+            self.ubx_class = '06'
+            self.ubx_id = '09'
+        except struct.error:
+            print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
 
 
     
