@@ -66,8 +66,10 @@ class UbxStream(object):
                 print(i.device)
 
 
-    def read(self, timeout=5):
-        self.dev.reset_input_buffer()
+    def read(self, timeout=5, reset=True):
+        if(reset):
+            self.dev.reset_input_buffer()
+
         now = time.time()
         counter = 0        
         while((time.time() - now) < timeout):    
@@ -95,45 +97,64 @@ class UbxStream(object):
     def enable_message(self, msgClass, msgId):
         msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 1, 0, 0, 0, 0])
         self.dev.write(msg.msg)
-        return msg
+        if(self.__confirmation()):
+            return msg
 
     def disable_message(self, msgClass, msgId):
         msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 0, 0, 0, 0, 0])
         self.dev.write(msg.msg)
-        return msg
+        if(self.__confirmation()):
+            return msg
 
     def reset_config(self):
         clearMask, saveMask, loadMask, deviceMask = [255, 255, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [3]
         msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
         self.dev.write(msg.msg)
-        return msg
+        if(self.__confirmation()):
+            return msg
     
     def save_config(self):
         clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [19]
         msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
         self.dev.write(msg.msg)
-        return msg
+        if(self.__confirmation()):
+            return msg
         
     def load_config(self):
         clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 0, 0], [255, 255, 0, 0], [19]
         msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
         self.dev.write(msg.msg)
-        return msg
+        if(self.__confirmation()):
+            return msg
 
     def nav_config(self, dynModel):
         msg = UbxMessage('06', '24', msg_type="tx", dynModel=dynModel)
         self.dev.write(msg.msg)
-        return msg
+        if(self.__confirmation()):
+            return msg
+
+    def __confirmation(self):
+        now = time.time()
+        while(time.time() - now < 5):
+            answer = self.read()
+            if(answer.ubx_class=='05' and answer.ubx_id=='01'):
+                print("Acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
+                return True
+            elif(answer.ubx_class=='05' and answer.ubx_id=='00'):
+                print("Not acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
+                return False
+
+        print("Message not received")
+        return False
 
             
 class UbxMessage(object):
     def __init__(self, ubx_class, ubx_id, msg_type="rx", **kwargs):
         if(msg_type == "rx"):
             print("Receiving")
+            print("{} {}".format(ubx_class, ubx_id))
             #NAV
             if(ubx_class == '01'):
-                print("{} {}".format(ubx_class, ubx_id))
-                
                 message = {'02': lambda: self.__ubx_NAV_POSLLH(kwargs["dev"]),
                            '04': lambda: self.__ubx_NAV_DOP(kwargs["dev"]),
                            '06': lambda: self.__ubx_NAV_SOL(kwargs["dev"]),
@@ -148,7 +169,10 @@ class UbxMessage(object):
                 print("")
             #ACK
             elif(ubx_class == '05'):
-                print("")
+                message = {'01': lambda: self.__ubx_ACK_ACK(kwargs["dev"]),
+                           '00': lambda: self.__ubx_ACK_NAK(kwargs["dev"])}
+                message[ubx_id]()
+
             #CFG
             elif(ubx_class == '06'):
                 print("")
@@ -319,8 +343,37 @@ class UbxMessage(object):
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-            
 
+    ## UBX-ACK 0x05 ##
+
+    # UBX-ACK-ACK (0x05 0x01)
+    def __ubx_ACK_ACK(self, dev):
+        payload = dev.read(size=4)
+        if(self.__calc_checksum(5, 1, payload, dev)):
+            try:
+                payload = payload[2:]
+                self.clsID, self.msgID = struct.unpack('=BB', payload)
+                self.ubx_class = '05'
+                self.ubx_id = '01'
+                
+            except struct.error:
+                print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
+        
+    # UBX-ACK-NAK (0x05 0x00)
+    def __ubx_ACK_NAK(self, dev):
+        payload = dev.read(size=4)
+        if(self.__calc_checksum(5, 0, payload, dev)):
+            try:
+                payload = payload[2:]
+                self.clsID, self.msgID = struct.unpack('=BB', payload)
+                self.ubx_class = '05'
+                self.ubx_id = '00'
+                
+            except struct.error:
+                print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+        
+        
                 
     ## UBX-CFG 0x06 ##
     
