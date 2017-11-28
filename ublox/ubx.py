@@ -109,6 +109,7 @@ class UbxStream(object):
 
 
     def disable_message(self, msgClass, msgId):
+        #msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 0, 0, 0, 0, 0])
         msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 0, 0, 0, 0, 0])
         self.dev.write(msg.msg)
         if(self.__confirmation()):
@@ -157,12 +158,14 @@ class UbxStream(object):
         ids1 = [10, 68, 9, 0, 1, 67, 66, 13, 64, 6, 2, 7, 3, 4, 65, 15, 5, 8]
         ids2 = [65, 0, 64, 3, 4]
         counter = 0
+        string = ""
 
         for i in ids1:
             val = False
             while(val == False):
                 val = self.disable_message(classes[0], i)
                 if(val):
+                    string += "Class: {} ID: {} // ".format(classes[0], i)
                     counter += 1
                     break
 
@@ -171,23 +174,29 @@ class UbxStream(object):
             while(val == False):
                 val = self.disable_message(classes[1], i)
                 if(val):
+                    string += "Class: {} ID: {} // ".format(classes[1], i)
                     counter += 1
                     break
+
+        print("Counter: {}".format(counter))
+        print(string)
 
 
     def __confirmation(self):
         now = time.time()
         while(time.time() - now < 5):
-            print(self.dev.baudrate)
-            answer = self.read()
-            if(answer):
-                if(answer.ubx_class=='05' and answer.ubx_id=='01'):
-                    print("Acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
-                    return True
-                elif(answer.ubx_class=='05' and answer.ubx_id=='00'):
-                    print("Not acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
-                    return False
-
+            answer = self.read(reset=False)
+            try:
+                if(answer):
+                    if(answer.ubx_class=='05' and answer.ubx_id=='01'):
+                        print("Acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
+                        return True
+                    elif(answer.ubx_class=='05' and answer.ubx_id=='00'):
+                        print("Not acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
+                        return False
+            except AttributeError:
+                pass
+                
         print("Message not received")
         return False
 
@@ -318,7 +327,7 @@ class UbxMessage(object):
     # horizontal accuracy in mm / vertical accuracy in mm
     def __ubx_NAV_POSLLH(self, dev):
         payload = dev.read(size=30)
-        if self.__calc_checksum(1, 2, payload, dev):
+        if self.__validate_checksum(1, 2, payload, dev):
             try:
                 payload = payload[2:]
                 # Remove padding (=) introduced by struct for processor optimization
@@ -335,7 +344,7 @@ class UbxMessage(object):
     # Geometric / Position / Time / Vertical / Horizontal / Northing / Easting
     def __ubx_NAV_DOP(self, dev):
         payload = dev.read(size=20)
-        if self.__calc_checksum(1, 4, payload, dev):
+        if self.__validate_checksum(1, 4, payload, dev):
             try:
                 payload = payload[2:]
                 self.iTOW, self.gDOP, self.pDOP, self.tDOP, self.vDOP, self.hDOP, self.nDOP, self.eDOP = struct.unpack('=L7H', payload)
@@ -354,7 +363,7 @@ class UbxMessage(object):
     # reserved / number of SV's used / reserved
     def __ubx_NAV_SOL(self, dev):
         payload = dev.read(size=54)
-        if(self.__calc_checksum(1, 6, payload, dev)):
+        if(self.__validate_checksum(1, 6, payload, dev)):
             try:
                 payload = payload[2:]
                 self.iTOW, self.fTOW, self.week, self.gpsFix, self.flags, self.ecefX, self.ecefY, self.ecefZ, self.pAcc, self.ecefVX, self.ecefVY, self.ecefVZ, self.sAcc, self.pDOP, reserved1, self.numSV, reserved21, reserved22, reserved23, reserved24 = struct.unpack('=LlhBB3lL3lLH6B', payload)
@@ -378,7 +387,7 @@ class UbxMessage(object):
     # Heading of Vehicle in deg (1e-5) / Magnetic Declination in deg (1e-2) <-+ Accuracy in deg
     def __ubx_NAV_PVT(self, dev):
         payload = dev.read(size=94)
-        if(self.__calc_checksum(1, 7, payload, dev)):
+        if(self.__validate_checksum(1, 7, payload, dev)):
             try:
                 payload = payload[2:]
                 self.iTOW, self.year, self.month, self.day, self.hour, self.minute, self.second, self.valid, self.tAcc, self.nano, self.fixType, self.flags, self.flags2, self.numSV, self.lon, self.lat, self.height, self.hMSL, self.hAcc, self.vAcc, self.velN, self.velE, self.velD, self.gSpeed, self.headMot, self.sAcc, self.headAcc, self.pDOP, reserved11, reserved12, reserved13, reserved14, reserved15, reserved16,  self.headVeh, self.magDec, self.magAcc = struct.unpack('=LH5BBLlB2BB4l2L5lLLH6BlhH', payload)
@@ -394,7 +403,7 @@ class UbxMessage(object):
     # UBX-ACK-ACK (0x05 0x01)
     def __ubx_ACK_ACK(self, dev):
         payload = dev.read(size=4)
-        if(self.__calc_checksum(5, 1, payload, dev)):
+        if(self.__validate_checksum(5, 1, payload, dev)):
             try:
                 payload = payload[2:]
                 self.clsID, self.msgID = struct.unpack('=BB', payload)
@@ -409,7 +418,7 @@ class UbxMessage(object):
     # UBX-ACK-NAK (0x05 0x00)
     def __ubx_ACK_NAK(self, dev):
         payload = dev.read(size=4)
-        if(self.__calc_checksum(5, 0, payload, dev)):
+        if(self.__validate_checksum(5, 0, payload, dev)):
             try:
                 payload = payload[2:]
                 self.clsID, self.msgID = struct.unpack('=BB', payload)
@@ -437,26 +446,26 @@ class UbxMessage(object):
         rate1, rate2, rate3, rate4 = int(rate[-2:], 16), int(rate[-4:-2], 16), int(rate[2:4], 16), int(rate[:2], 16)
         
         payload = [length, 0, uart_port, 0, 0, 0, 208, 8, 0, 0, rate1, rate2, rate3, rate4, 7, 0, 3, 0, 0, 0, 0, 0]
-        print(payload)
-        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload)
         payload = payload + checksum
         try:
             self.msg = struct.pack('>H26B', header, ubx_class, ubx_id, *payload)
-            print(binascii.hexlify(self.msg))
             self.ubx_class = '06'
             self.ubx_id = '00'
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
-    
+
+
     # UBX-CFG-MSG (0x06 0x01)
     def __ubx_CFG_MSG(self,  msgClass, msgId, ioPorts):
         header, ubx_class, ubx_id, length = 46434, 6, 1, 8
         payload = [length, 0, msgClass, msgId] + ioPorts
-        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload)
         try:
             self.msg = struct.pack('>H14B', header, ubx_class, ubx_id, length, 0,  msgClass, msgId, ioPorts[0], ioPorts[1], ioPorts[2], ioPorts[3], ioPorts[4], ioPorts[5], checksum[0], checksum[1])
             self.ubx_class = '06'
             self.ubx_id = '01'
+
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
@@ -466,7 +475,7 @@ class UbxMessage(object):
     def __ubx_CFG_CFG(self, clearMask, saveMask, loadMask, deviceMask):
         header, ubx_class, ubx_id, length = 46434, 6, 9, 13
         payload = [length, 0] + clearMask + saveMask + loadMask + deviceMask
-        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload)
         payload = payload + checksum
         try:
             self.msg = struct.pack('>H19B', header, ubx_class, ubx_id, *payload)
@@ -482,7 +491,7 @@ class UbxMessage(object):
         header, ubx_class, ubx_id, length = 46434, 6, 36, 36
         body = [3, 0, 0, 0, 0, 16, 39, 0, 0, 5, 0, 250, 0, 250, 0, 100, 0, 44, 1, 0, 60, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 0]
         payload = [length, 0] + [255, 255] + [dynModel] + body
-        checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload)
         payload = payload + checksum
         try:
             self.msg = struct.pack('>H42B', header, ubx_class, ubx_id, *payload)
@@ -497,29 +506,58 @@ class UbxMessage(object):
     # bitmask 0xFF == modulus 256
     # It might be that the modulo needs to be calculated after full operations
     # This might become relavant when overflow occurs in check1 <- NMEA messages like CFG use class/id (xF1 x41)
-    def __calc_checksum(self, ubx_class, ubx_id, payload, dev=None, returnval=False):
-        
+#    def __calc_checksum(self, ubx_class, ubx_id, payload, dev=None, returnval=False):
+#        
+#        check1 = (ubx_class + ubx_id) % 256
+#        check2 = ((2*ubx_class) + ubx_id) % 256
+#        
+#        if(returnval==False):
+#            chk1 = int(dev.read().encode('hex'), 16)
+#            chk2 = int(dev.read().encode('hex'), 16)
+#            
+#            for i in range(0, len(payload)):
+#                check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
+#                check2 = (check1 + check2) % 256
+#                
+#            if chk1==check1 and chk2==check2:
+#                return True
+#            else:
+#                print("Checksum is incorrect")
+#                return False
+#        else:
+#            for i in range(0, len(payload)):
+#                check1 = (check1 + payload[i]) % 256
+#                check2 = (check1 + check2) % 256
+#                
+#            result = [check1, check2]
+#            return result
+
+
+    def __calc_checksum(self, ubx_class, ubx_id, payload):
         check1 = (ubx_class + ubx_id) % 256
         check2 = ((2*ubx_class) + ubx_id) % 256
         
-        if(returnval==False):
-            chk1 = int(dev.read().encode('hex'), 16)
-            chk2 = int(dev.read().encode('hex'), 16)
-            
-            for i in range(0, len(payload)):
-                check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
-                check2 = (check1 + check2) % 256
+        for i in range(0, len(payload)):
+            check1 = (check1 + payload[i]) % 256
+            check2 = (check1 + check2) % 256
                 
-            if chk1==check1 and chk2==check2:
-                return True
-            else:
-                print("Checksum is incorrect")
-                return False
-        else:
-            for i in range(0, len(payload)):
-                check1 = (check1 + payload[i]) % 256
-                check2 = (check1 + check2) % 256
-                
-            result = [check1, check2]
-            return result
+        result = [check1, check2]
+        return result
+
+
+    def __validate_checksum(self, ubx_class, ubx_id, payload, dev):
+        check1 = (ubx_class + ubx_id) % 256
+        check2 = ((2*ubx_class) + ubx_id) % 256
         
+        chk1 = int(dev.read().encode('hex'), 16)
+        chk2 = int(dev.read().encode('hex'), 16)
+            
+        for i in range(0, len(payload)):
+            check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
+            check2 = (check1 + check2) % 256
+                
+        if chk1==check1 and chk2==check2:
+            return True
+        else:
+            print("Checksum is incorrect")
+            return False
