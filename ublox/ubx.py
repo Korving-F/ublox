@@ -1,29 +1,31 @@
-import binascii
-import serial
-from serial.tools import list_ports
 import struct
 import sys
 import time
+import binascii
+import serial
+from serial.tools import list_ports
 
 class UbxStream(object):
     def __init__(self, dev=None):
         
         self._ubox_synch = '\xb5b'
         
-        if(dev==None):
-            self.dev = serial.Serial(timeout=1)
-        else:
+        if(dev):
             self.dev = dev
-            
+        else:
+            self.dev = serial.Serial(timeout=1)
+
         try:
             if(self._dev.open):
                 self.baudrate = dev.baudrate
         except AttributeError:
-            print("Serial connection has not been properly initialized yet.")
-    
+            print("Serial Port is closed; open before using.")
+
+
     @property
     def dev(self):
         return self._dev
+
 
     @dev.setter
     def dev(self, dev):
@@ -35,6 +37,7 @@ class UbxStream(object):
         else:
             print("This connection is not supported")
 
+
     @property
     def baudrate(self):
         try:
@@ -44,26 +47,22 @@ class UbxStream(object):
                 print("Port is closed.")
         except AttributeError:
             print("Serial connection has not been initialized or assigned a baudrate yet.")
-            
+
+
     @baudrate.setter
-    def baudrate(self, rate):
+    def baudrate(self,baudrate):
+        y = UbxMessage('06','00', msg_type="tx", rate=baudrate)
+
         try:
-            if(self._dev.isOpen()):
-                print("Im here")
-                old_baudrate = self._dev.baudrate
-                print("Old baudrate is:{}".format(old_baudrate))
-                if(self.__set_baudrate(rate)):
-                    print("Baudrate changed to: {}".format(rate))
-                    self._baudrate = rate
-                else:
-                    self._dev.baudrate = old_baudrate
-                    self._baudrate = old_baudrate
-                
-            else:
-                print("Serial connection has not been opened yet")
-                
+            if(self.dev.writable):
+                if(self.dev.write(y.msg)):
+                    time.sleep(1)  # Sleep to make sure buffer gets written!
+                    self._baudrate = baudrate
+                    self._dev.baudrate = baudrate
+
         except AttributeError:
             print("Serial connection has not been initialized or assigned a port yet.")
+
 
     def detect_ports(self):
         ports = list(serial.tools.list_ports.comports())
@@ -74,7 +73,7 @@ class UbxStream(object):
                 print(i.device)
 
 
-    def read(self, timeout=5, reset=True):
+    def read(self, timeout=3, reset=True):
         if(reset):
             self.dev.reset_input_buffer()
 
@@ -108,11 +107,13 @@ class UbxStream(object):
         if(self.__confirmation()):
             return msg
 
+
     def disable_message(self, msgClass, msgId):
         msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 0, 0, 0, 0, 0])
         self.dev.write(msg.msg)
         if(self.__confirmation()):
             return msg
+
 
     def reset_config(self):
         clearMask, saveMask, loadMask, deviceMask = [255, 255, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [3]
@@ -120,7 +121,8 @@ class UbxStream(object):
         self.dev.write(msg.msg)
         if(self.__confirmation()):
             return msg
-    
+
+
     def save_config(self):
         clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [19]
         #clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [255, 255, 0, 0], [0, 0, 0, 0], [255]
@@ -128,7 +130,8 @@ class UbxStream(object):
         self.dev.write(msg.msg)
         if(self.__confirmation()):
             return msg
-        
+
+
     def load_config(self):
         clearMask, saveMask, loadMask, deviceMask = [0, 0, 0, 0], [0, 0, 0, 0], [255, 255, 0, 0], [19]
         msg = UbxMessage('06','09', msg_type="tx", clearMask=clearMask, saveMask=saveMask, loadMask=loadMask, deviceMask=deviceMask)
@@ -136,11 +139,13 @@ class UbxStream(object):
         if(self.__confirmation()):
             return msg
 
+
     def nav_config(self, dynModel):
         msg = UbxMessage('06', '24', msg_type="tx", dynModel=dynModel)
         self.dev.write(msg.msg)
         if(self.__confirmation()):
             return msg
+
 
     # diables all NMEA messages by default using ubx class / ids
     # 0xF0 = 240 / 0xF1 = 241
@@ -151,7 +156,8 @@ class UbxStream(object):
         classes = [240, 241]
         ids1 = [10, 68, 9, 0, 1, 67, 66, 13, 64, 6, 2, 7, 3, 4, 65, 15, 5, 8]
         ids2 = [65, 0, 64, 3, 4]
-                
+        counter = 0
+
         for i in ids1:
             val = False
             while(val == False):
@@ -168,27 +174,19 @@ class UbxStream(object):
                     counter += 1
                     break
 
-    def __set_baudrate(self, rate):
-        msg = UbxMessage('06', '00', msg_type="tx", rate=rate)
-        self.dev.write(msg.msg)
-        if(self.__confirmation()):
-            print("Im here tralala")
-            return True
-        return False
-        
-        
 
     def __confirmation(self):
         now = time.time()
         while(time.time() - now < 5):
             print(self.dev.baudrate)
             answer = self.read()
-            if(answer.ubx_class=='05' and answer.ubx_id=='01'):
-                print("Acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
-                return True
-            elif(answer.ubx_class=='05' and answer.ubx_id=='00'):
-                print("Not acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
-                return False
+            if(answer):
+                if(answer.ubx_class=='05' and answer.ubx_id=='01'):
+                    print("Acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
+                    return True
+                elif(answer.ubx_class=='05' and answer.ubx_id=='00'):
+                    print("Not acknowledged. CLS:{} ID:{}".format(answer.clsID, answer.msgID))
+                    return False
 
         print("Message not received")
         return False
@@ -439,10 +437,12 @@ class UbxMessage(object):
         rate1, rate2, rate3, rate4 = int(rate[-2:], 16), int(rate[-4:-2], 16), int(rate[2:4], 16), int(rate[:2], 16)
         
         payload = [length, 0, uart_port, 0, 0, 0, 208, 8, 0, 0, rate1, rate2, rate3, rate4, 7, 0, 3, 0, 0, 0, 0, 0]
+        print(payload)
         checksum = self.__calc_checksum(ubx_class, ubx_id, payload, returnval=True)
         payload = payload + checksum
         try:
             self.msg = struct.pack('>H26B', header, ubx_class, ubx_id, *payload)
+            print(binascii.hexlify(self.msg))
             self.ubx_class = '06'
             self.ubx_id = '00'
         except struct.error:
