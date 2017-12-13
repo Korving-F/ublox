@@ -86,7 +86,7 @@ class UbxStream(object):
 
         now = time.time()
         counter = 0
-        while(time.time() - now) < timeout):
+        while(time.time() - now) < timeout:
             if self._dev.in_waiting > 0:
                 if counter < 2:
                     try:
