@@ -43,5 +43,6 @@ flycheck_*.el
 
 # PYTHON
 __pycache__/
+.cache/
 *.py[cod]
 *$py.class

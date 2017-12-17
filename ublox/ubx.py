@@ -358,6 +358,7 @@ class UbxMessage(object):
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
+
     
     # time_of_week in ms / Dilution of Precision
     # DOP is Dimensionless / scaled by factor 100
@@ -560,6 +561,7 @@ class UbxMessage(object):
         if self._version == 3:          
             chk1 = dev.read()[0]
             chk2 = dev.read()[0]
+
             for i in range(0, len(payload)):
                 check1 = (check1 + ord(payload[i])) % 256
                 check2 = (check1 + check2) % 256
