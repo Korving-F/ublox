@@ -1,17 +1,25 @@
-# UBX Packet Parser
+## UBX Packet Parser
 
-#### UBX - u-blox's binary protocol messages
----
-## Overview
-This library is able to configure some elementary properties of  ublox GPS modules that operate using the UBX binary protocol as well as read periodic messages coming from the device (and verify their integrity) when a serial connection has been instantiated. It was created because ...
+### Introduction
+This module is able to read from and configure ublox GPS modules
+through their UBX binary protocol over a serial connection. It can be considered
+a wrapper around the [pyserial](https://github.com/pyserial/pyserial) module.
 
-A ublox 8 device was used to develop and test this library in combination with the documentation provided by ublox.<sup>[1](https://www.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_%28UBX-13003221%29_Public.pdf)</sup> Many of these messages should also be compatible with earlier versions of the device (4/5/6/7) but others might not be backwards compatible due to being more recently added to the UBX-protocol.
+A ublox 8 device was used to develop and test this library in combination with
+the documentation provided by
+[ublox](https://www.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_%28UBX-13003221%29_Public.pdf).
+Many of the messages specified in this document should also be compatible with
+earlier versions of the device (4/5/6/7) but others might not be backwards
+compatible.
 
-## Dependencies
+### Test
+Move to main directory and issue:
+ ``` bash
+$ python2 -m pytest
+$ python3 -m pytest
+ ```
 
-## Usage
-
-## Supported Messages
+### Supported Messages
 *  #### Configuration
     - CFG-MSG  (0x06 0x01)
     - CFG-CFG  (0x06 0x09)
@@ -30,4 +38,20 @@ A ublox 8 device was used to develop and test this library in combination with t
     - ACK-ACK (0x05 0x01)
     - ...
 
-## Future Improvements
+### Usage
+One would usually create a serial connection to the GPS module and proceed to
+create an instance of UbxStream through which one reads data and sends
+configuration messages.
+The UbxStream class comes with functions to save, load and reset configurations
+as well as an automated way to disable all enabled-by-default NMEA messages.
+Of course one can enable/disable specific messages by passing in the documented
+message class and id.
+One can auto detect serial ports and set the baudrate for the connection.
+<br>
+<img src="https://raw.githubusercontent.com/Korving-F/ublox/master/docs/usage.png" alt="UBX Parser at work" height="50%" width="50%">
+
+
+### Future Improvements
+At the moment only activated messages can be read and there is no support yet
+for polling specific messages. If any desired messages are not included please
+create an issue.
