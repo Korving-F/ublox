@@ -102,7 +102,7 @@ class UbxStream(object):
                             counter = 0
                     except serial.serialutil.SerialException:
                         print("Somethig went wrong")
-                    
+
                 else:
                     if self._version == 3:
                         ubx_class = binascii.hexlify(self.dev.read()).decode('utf-8')
@@ -110,12 +110,12 @@ class UbxStream(object):
                     else:
                         ubx_class = binascii.hexlify(self.dev.read())
                         ubx_id = binascii.hexlify(self.dev.read())
-                        
+
                     return UbxMessage(ubx_class, ubx_id, dev=self.dev, version=self._version)
 
         print("Connection timed out..")
 
-    
+
     def enable_message(self, msgClass, msgId):
         msg = UbxMessage('06', '01', msg_type="tx", msgClass=msgClass, msgId=msgId, ioPorts=[0, 1, 0, 0, 0, 0])
         self.dev.write(msg.msg)
@@ -211,11 +211,11 @@ class UbxStream(object):
                         return False
             except AttributeError:
                 pass
-                
+
         print("Message not received")
         return False
 
-            
+
 class UbxMessage(object):
     def __init__(self, ubx_class, ubx_id, msg_type="rx", **kwargs):
         if(msg_type == "rx"):
@@ -275,8 +275,8 @@ class UbxMessage(object):
             else:
                 print("Unsuported message class")
                 raise TypeError
-                
-           
+
+
         elif(msg_type == "tx"):
             print("Transmitting")
             #NAV
@@ -294,7 +294,7 @@ class UbxMessage(object):
             #CFG
             elif(ubx_class == '06'):
                 print("{} {}".format(ubx_class, ubx_id))
-                
+
                 message = {'00': lambda: self.__ubx_CFG_PRT(kwargs["rate"]),
                            '01': lambda: self.__ubx_CFG_MSG(kwargs["msgClass"], kwargs["msgId"], kwargs["ioPorts"]),
                            '09': lambda: self.__ubx_CFG_CFG(kwargs["clearMask"], kwargs["saveMask"], kwargs["loadMask"], kwargs["deviceMask"]),
@@ -331,10 +331,10 @@ class UbxMessage(object):
             else:
                 print("Unsuported message class")
                 raise TypeError
-                
+
         else:
             print("Message type not supported.")
-            
+
 
     ## UBX-NAV 0x01 ##
 
@@ -344,8 +344,6 @@ class UbxMessage(object):
     def __ubx_NAV_POSLLH(self, dev):
         payload = dev.read(size=30)
         payload_cpy = payload
-        if self._version == 3:
-            payload = "".join(chr(x) for x in payload)
 
         if self.__validate_checksum(1, 2, payload, dev):
             try:
@@ -359,15 +357,13 @@ class UbxMessage(object):
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
 
-    
+
     # time_of_week in ms / Dilution of Precision
     # DOP is Dimensionless / scaled by factor 100
     # Geometric / Position / Time / Vertical / Horizontal / Northing / Easting
     def __ubx_NAV_DOP(self, dev):
         payload = dev.read(size=20)
         payload_cpy = payload
-        if self._version == 3:
-            payload = "".join(chr(x) for x in payload)
 
         if self.__validate_checksum(1, 4, payload, dev):
             try:
@@ -375,11 +371,11 @@ class UbxMessage(object):
                 self.iTOW, self.gDOP, self.pDOP, self.tDOP, self.vDOP, self.hDOP, self.nDOP, self.eDOP = struct.unpack('=L7H', payload_cpy)
                 self.ubx_class = '01'
                 self.ubx_id = '04'
-                
+
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-                
+
     # Time_of_week in ms / Fractional time_of_week ns / Week number
     # GPS Fix (6 valid types depending on status) / Fix status flags (4 types)
     # ECEF X cm / ECEF Y cm / ECEF Z cm / Position Accuracy cm
@@ -389,16 +385,14 @@ class UbxMessage(object):
     def __ubx_NAV_SOL(self, dev):
         payload = dev.read(size=54)
         payload_cpy = payload
-        if self._version == 3:
-            payload = "".join(chr(x) for x in payload)
-        
+
         if(self.__validate_checksum(1, 6, payload, dev)):
             try:
                 payload_cpy = payload_cpy[2:]
                 self.iTOW, self.fTOW, self.week, self.gpsFix, self.flags, self.ecefX, self.ecefY, self.ecefZ, self.pAcc, self.ecefVX, self.ecefVY, self.ecefVZ, self.sAcc, self.pDOP, reserved1, self.numSV, reserved21, reserved22, reserved23, reserved24 = struct.unpack('=LlhBB3lL3lLH6B', payload_cpy)
                 self.ubx_class = '01'
                 self.ubx_id = '06'
-                
+
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
@@ -417,8 +411,6 @@ class UbxMessage(object):
     def __ubx_NAV_PVT(self, dev):
         payload = dev.read(size=94)
         payload_cpy = payload
-        if self._version == 3:
-            payload = "".join(chr(x) for x in payload)
 
         if(self.__validate_checksum(1, 7, payload, dev)):
             try:
@@ -437,8 +429,6 @@ class UbxMessage(object):
     def __ubx_ACK_ACK(self, dev):
         payload = dev.read(size=4)
         payload_cpy = payload
-        if self._version == 3:
-            payload = "".join(chr(x) for x in payload)
 
         if(self.__validate_checksum(5, 1, payload, dev)):
             try:
@@ -447,17 +437,15 @@ class UbxMessage(object):
                 self.clsID, self.msgID = hex(self.clsID), hex(self.msgID)
                 self.ubx_class = '05'
                 self.ubx_id = '01'
-                
+
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
-        
+
     # UBX-ACK-NAK (0x05 0x00)
     def __ubx_ACK_NAK(self, dev):
         payload = dev.read(size=4)
         payload_cpy = payload
-        if self._version == 3:
-            payload = "".join(chr(x) for x in payload)
 
         if(self.__validate_checksum(5, 0, payload, dev)):
             try:
@@ -466,12 +454,12 @@ class UbxMessage(object):
                 self.clsID, self.msgID = hex(self.clsID), hex(self.msgID)
                 self.ubx_class = '05'
                 self.ubx_id = '00'
-                
+
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
-        
-        
-                
+
+
+
     ## UBX-CFG 0x06 ##
 
     # UBX-CFG-PRT (0x06 0x00)
@@ -485,7 +473,7 @@ class UbxMessage(object):
             rate = '0' + rate
 
         rate1, rate2, rate3, rate4 = int(rate[-2:], 16), int(rate[-4:-2], 16), int(rate[2:4], 16), int(rate[:2], 16)
-        
+
         payload = [length, 0, uart_port, 0, 0, 0, 208, 8, 0, 0, rate1, rate2, rate3, rate4, 7, 0, 3, 0, 0, 0, 0, 0]
         checksum = self.__calc_checksum(ubx_class, ubx_id, payload)
         payload = payload + checksum
@@ -545,11 +533,11 @@ class UbxMessage(object):
     def __calc_checksum(self, ubx_class, ubx_id, payload):
         check1 = (ubx_class + ubx_id) % 256
         check2 = ((2*ubx_class) + ubx_id) % 256
-        
+
         for i in range(0, len(payload)):
             check1 = (check1 + payload[i]) % 256
             check2 = (check1 + check2) % 256
-                
+
         result = [check1, check2]
         return result
 
@@ -558,20 +546,21 @@ class UbxMessage(object):
         check1 = (ubx_class + ubx_id) % 256
         check2 = ((2*ubx_class) + ubx_id) % 256
 
-        if self._version == 3:          
+        if self._version == 3:
             chk1 = dev.read()[0]
             chk2 = dev.read()[0]
 
             for i in range(0, len(payload)):
-                check1 = (check1 + ord(payload[i])) % 256
+                check1 = (check1 + payload[i]) % 256
                 check2 = (check1 + check2) % 256
+
         else:
             chk1 = int(dev.read().encode('hex'), 16)
             chk2 = int(dev.read().encode('hex'), 16)
             for i in range(0, len(payload)):
                 check1 = (check1 + int(payload[i].encode('hex'), 16)) % 256
                 check2 = (check1 + check2) % 256
-                
+
         if chk1==check1 and chk2==check2:
             return True
         else:
