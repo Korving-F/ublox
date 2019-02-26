@@ -166,12 +166,12 @@ class UbxStream(object):
     # diables all NMEA messages by default using ubx class / ids
     # 0xF0 = 240 / 0xF1 = 241
     # NMEA Messages:
-    # class 0xF0: 0A, 44, 09, 00, 01, 43, 42, 0D, 40, 06, 02, 07, 03, 04, 41, 0F, 05, 08
-    # class 0xF1: 41, 00, 40, 03, 04
+    # class 0xF0: 0A, 09, 00, 01, 0D, 06, 02, 07, 03, 04, 41, 0F, 05, 08
+    # class 0xF1: 00, 03, 04
     def disable_NMEA(self):
         classes = [240, 241]
-        ids1 = [10, 68, 9, 0, 1, 67, 66, 13, 64, 6, 2, 7, 3, 4, 65, 15, 5, 8]
-        ids2 = [65, 0, 64, 3, 4]
+        ids1 = [10, 9, 0, 1, 13, 6, 2, 7, 3, 4, 65, 15, 5, 8]
+        ids2 = [0, 3, 4]
         counter = 0
         string = ""
 
