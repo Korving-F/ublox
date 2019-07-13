@@ -227,7 +227,9 @@ class UbxMessage(object):
                 message = {'02': lambda: self.__ubx_NAV_POSLLH(kwargs["dev"]),
                            '04': lambda: self.__ubx_NAV_DOP(kwargs["dev"]),
                            '06': lambda: self.__ubx_NAV_SOL(kwargs["dev"]),
-                           '07': lambda: self.__ubx_NAV_PVT(kwargs["dev"])}
+                           '07': lambda: self.__ubx_NAV_PVT(kwargs["dev"]),
+                           '60': lambda: self.__ubx_NAV_AOPSTATUS(kwargs["dev"]),
+                           '3c': lambda: self.__ubx_NAV_RELPOSNED(kwargs["dev"])}
                 message[ubx_id]()
 
             #RXM
@@ -338,6 +340,25 @@ class UbxMessage(object):
 
     ## UBX-NAV 0x01 ##
 
+    # time_of_week in ms / AssistNow Autonomous configuration
+    # AssistNow Autonomous subsystem idle / reserved
+    def __ubx_NAV_AOPSTATUS(self, dev):
+        payload = dev.read(size=18)
+        payload_cpy = payload
+
+        if self.__validate_checksum(1, 96, payload, dev):
+            try:
+                payload_cpy = payload_cpy[2:]
+                # Remove padding (=) introduced by struct for processor optimization
+                self.iTOW, self.aopCfg, self.status, self.reserved11, self.reserved12, self.reserved13, self.reserved14, self.reserved15, self.reserved16, self.reserved17, self.reserved18, self.reserved19, self.reserved110 = struct.unpack('=L12B', payload_cpy)
+                self.ubx_class = '01'
+                self.ubx_id = '60'
+
+            except struct.error:
+                print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
+
+
     # time_of_week in ms / longitude in deg / latitude in deg
     # height ellipsoid in mm / height mean sea level mm
     # horizontal accuracy in mm / vertical accuracy in mm
@@ -421,6 +442,27 @@ class UbxMessage(object):
                 self.ubx_id = '07'
             except struct.error:
                 print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
+
+
+    # Message version / Reserved / Reference Station ID (range 0..4095)
+    # Time of Week in ms / Relative Postition Vector (North, East and Down components)
+    # High precision relative position vector in mm; North East and Down components (range -99..+99)
+    # Reserved / Accuracy of relative position (North East and Down components) / Flags
+    def __ubx_NAV_RELPOSNED(self, dev):
+        payload = dev.read(size=42)
+        payload_cpy = payload
+
+        if(self.__validate_checksum(1, 60, payload, dev)):
+            try:
+                payload_cpy = payload_cpy[2:]
+                self.version, self.reserved1, self.refStationId, self.iTOW, self.relPosN, self.relPosE, self.relPosD, self.relPosHPN, self.relPosHPE, self.relPosHPD, self.reserved2, self.accN, self.accE, self.accD, self.flags = struct.unpack('=BBHLlllbbbBLLLi', payload_cpy)
+                self.ubx_class = '01'
+                self.ubx_id = '3c'
+
+            except struct.error:
+                print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
+
 
 
     ## UBX-ACK 0x05 ##
