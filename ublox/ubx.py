@@ -130,6 +130,11 @@ class UbxStream(object):
         if(self.__confirmation()):
             return msg
 
+    def cfg_rate(self,rate):
+        msg = UbxMessage('06','08', msg_type="tx", rate=rate, timeRef=0)
+        self.dev.write(msg.msg)
+        if(self.__confirmation()):
+            return msg
 
     def reset_config(self):
         clearMask, saveMask, loadMask, deviceMask = [255, 255, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [3]
@@ -297,6 +302,7 @@ class UbxMessage(object):
 
                 message = {'00': lambda: self.__ubx_CFG_PRT(kwargs["rate"]),
                            '01': lambda: self.__ubx_CFG_MSG(kwargs["msgClass"], kwargs["msgId"], kwargs["ioPorts"]),
+                           '08': lambda: self.__ubx_CFG_RATE(kwargs["rate"], kwargs["timeRef"]),
                            '09': lambda: self.__ubx_CFG_CFG(kwargs["clearMask"], kwargs["saveMask"], kwargs["loadMask"], kwargs["deviceMask"]),
                            '24': lambda: self.__ubx_CFG_NAV5(kwargs["dynModel"])
                 }
@@ -498,6 +504,28 @@ class UbxMessage(object):
         except struct.error:
             print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
+
+    # UBX-CFG-RATE (0x06 0x08)
+    def __ubx_CFG_RATE(self, rate, timeRef):
+        header, ubx_class, ubx_id, length = 46434, 6, 8, 6
+
+        rate = hex(rate)
+        rate = rate[2:]
+        while(len(rate) < 4):
+            rate = '0' + rate
+
+        rate1, rate2 = int(rate[2:4], 16), int(rate[:2], 16)
+
+        navRate = 1 # according to ublox ICD this value is a don't care
+        payload = [length, 0, rate1, rate2, navRate, 0, 0, timeRef]
+        checksum = self.__calc_checksum(ubx_class, ubx_id, payload)
+        payload = payload + checksum
+        try:
+            self.msg = struct.pack('>H12B', header, ubx_class, ubx_id, *payload)
+            self.ubx_class = '06'
+            self.ubx_id = '08'
+        except struct.error:
+            print("{} {}".format(sys.exc_info()[0], sys.exc_info()[1]))
 
 
     ## UBX-CFG-CFG (0x06 0x09)
