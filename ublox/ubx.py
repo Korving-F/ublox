@@ -506,6 +506,7 @@ class UbxMessage(object):
 
 
     # UBX-CFG-RATE (0x06 0x08)
+    # Rate is in milliseconds (1000ms == 1Hz)
     def __ubx_CFG_RATE(self, rate, timeRef):
         header, ubx_class, ubx_id, length = 46434, 6, 8, 6
 
@@ -594,3 +595,4 @@ class UbxMessage(object):
         else:
             print("Checksum is incorrect")
             return False
+
