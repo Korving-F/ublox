@@ -82,7 +82,7 @@ One way around this is to read from a loop and check for the message you're inte
         <ubx.UbxMessage object at 0x7f7a9dc69438>
 ```
 
-* For low power consumption use-cases one can increase the time between GNSS measurements. Value given is in milliseconds resulting in a calculated frequence. E.g. 1000ms == 1Hz (This is indicated by u-blox as a good default). Thanks @hankedan000 :) 
+* For low power consumption use-cases one can increase the time between GNSS measurements. Value given is in milliseconds resulting in a calculated frequency. E.g. 1000ms == 1Hz (This is indicated by u-blox as a good default). Thanks @hankedan000 :) 
 
 ```python
         >>> x.cfg_rate(1000)
