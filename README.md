@@ -59,7 +59,7 @@ One can auto detect serial ports and set the baudrate for the connection.
 This seems to have the effect that certain messages are never read while they are activated.
 One way around this is to read from a loop and check for the message you're interested in:
 
-        ```python
+```python
         >>> while(True):
         ...     y = x.read()
         ...     if(y.ubx_id == '04'):
@@ -71,26 +71,26 @@ One way around this is to read from a loop and check for the message you're inte
         01 04
         >>> y
         <ubx.UbxMessage object at 0x7f7a9dcf7be0>
-        ```
+```
 
 * Alternatively one can disable the flushed read as in the following example. NB! since you're reading from a stale buffer you're data will be old unless you read often and/or throw in an occasional flushed .read(). 
 
-        ```python
+```python
         >>> x.read(reset=False)
         Receiving
         01 07
         <ubx.UbxMessage object at 0x7f7a9dc69438>
-        ```
+```
 
 * For low power consumption use-cases one can increase the time between GNSS measurements. Value given is in milliseconds resulting in a calculated frequence. E.g. 1000ms == 1Hz (This is indicated by u-blox as a good default). Thanks @hankedan000 :) 
 
-        ```python
+```python
         >>> x.cfg_rate(1000)
         Receiving
         05 01
         Acknowledged. CLS:0x6 ID:0x8
         <ubx.UbxMessage object at 0x7f8d895ea518
-        ```
+```
 
 ### Future Improvements
 At the moment only activated messages can be read and there is no support yet
